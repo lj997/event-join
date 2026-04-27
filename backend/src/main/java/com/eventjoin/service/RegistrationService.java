@@ -47,8 +47,29 @@ public class RegistrationService {
             throw new BusinessException("报名已截止");
         }
         
-        if (registrationRepository.existsByUserAndEventAndIsCancelledFalse(currentUser, event)) {
-            throw new BusinessException("您已报名过此活动");
+        Optional<Registration> existingRegOpt = registrationRepository.findByUserAndEvent(currentUser, event);
+        
+        if (existingRegOpt.isPresent()) {
+            Registration existingReg = existingRegOpt.get();
+            if (!existingReg.getIsCancelled()) {
+                throw new BusinessException("您已报名过此活动");
+            }
+            
+            long currentCount = registrationRepository.countByEventIdAndIsCancelledFalse(eventId);
+            if (currentCount >= event.getMaxParticipants()) {
+                throw new BusinessException("报名人数已达上限");
+            }
+            
+            existingReg.setIsCancelled(false);
+            existingReg.setRegisteredAt(LocalDateTime.now());
+            existingReg.setCancelledAt(null);
+            
+            Registration saved = registrationRepository.save(existingReg);
+            
+            event.setCurrentParticipants((int) (currentCount + 1));
+            eventRepository.save(event);
+            
+            return saved;
         }
         
         long currentCount = registrationRepository.countByEventIdAndIsCancelledFalse(eventId);
